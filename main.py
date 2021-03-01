@@ -31,17 +31,25 @@ def to_matrix(num_users, num_movies, data):
     """
 
     # Create a 2D matrix of zeros representing every movie rating from every user
-    matrix = np.empty((num_users, num_movies), dtype='int')
+    n_matrix = np.empty((num_users, num_movies), dtype='int')
 
     # Loop through each user rating of every user
-    for id_user in data[:, 0]:
+    for user_rating in data:
+
+        # Get the user id
+        id_user = user_rating[0]
         # Get the movie id
-        id_movie = data[id_user, 1]
+        id_movie = user_rating[1]
         # Get the rating of the movie by the user
-        rating = data[id_user, 2]
+        rating = user_rating[2]
 
         # In the (id_user)th row in the matrix, in the (id_movie)th column, set the value to the rating of that movie
-        matrix[id_user - 1][id_movie - 1] = rating
+        n_matrix[id_user - 1, id_movie - 1] = rating
+
+    # Convert ndarray matrix to list matrix by copying and casting each line in n_matrix
+    matrix = []
+    for line in n_matrix:
+        matrix.append(list(line))
 
     return matrix
 

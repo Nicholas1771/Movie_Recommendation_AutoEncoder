@@ -96,6 +96,7 @@ def create_gui():
     epochs_label.pack()
 
     epochs_var = tk.IntVar()
+    epochs_var.set(200)
     epochs_entry = tk.Entry(window, textvariable=epochs_var)
     epochs_entry.pack()
 

@@ -7,6 +7,7 @@ import torch.optim as opt
 from torch.autograd import Variable
 from SAE import SAE
 import tkinter as tk
+from tkinter import Frame, Canvas, Scrollbar, Listbox, Tk, Button, Label, IntVar, Entry
 
 movies = None
 users = None
@@ -16,6 +17,11 @@ nb_movies = 0
 training_tensor = None
 test_tensor = None
 sae = None
+user_ratings = []
+selected_text = None
+selected_movie_name = None
+pred_matrix = None
+movie_list = None
 
 
 # Define method to convert to matrix structure
@@ -50,6 +56,16 @@ def to_matrix(num_users, num_movies, dataset):
     return matrix
 
 
+def get_movie_list(training_set):
+    global movie_list
+    movie_list = []
+    for movie_id in training_set.iloc[:, 1].unique():
+        try:
+            movie_list.append(movies[movie_id == movies.iloc[:, 0]].iloc[0, 1])
+        except:
+            pass
+
+
 def data_preprocessing():
     """
     This method sets up the global variables for the training to begin. It properly formats the training set into
@@ -68,6 +84,8 @@ def data_preprocessing():
     # Prepare the training set and test set
     training_set = pd.read_csv('data/ml-100k/ml-100k/u1.base', delimiter='\t', header=None)
     test_set = pd.read_csv('data/ml-100k/ml-100k/u1.test', delimiter='\t', header=None)
+
+    get_movie_list(training_set)
 
     # Convert training set and test set from dataframe to numpy arrays
     training_set = np.array(training_set, dtype='int')
@@ -88,26 +106,82 @@ def data_preprocessing():
     print('Preprocessing Complete')
 
 
+def submit_rating(rating):
+    rating = int(rating)
+    user_ratings.append((selected_movie_name, rating))
+    print(user_ratings)
+
+
+def cur_select(event):
+    global selected_movie_name
+    widget = event.widget
+    selection = widget.curselection()
+    picked = widget.get(selection[0])
+    selected_movie_name = picked[0:-1]
+    selected_text.delete(1.0, tk.END)
+    selected_text.insert(1.0, selected_movie_name)
+
+
 def create_gui():
-    window = tk.Tk(className='Movie Recommender - Stacked Autoencoder')
-    window.geometry('500x500')
+    global selected_text
+    window = Tk()
+    frame = Frame(window, width=500, height=500)
+    frame.pack(padx=10, pady=10)
 
-    epochs_label = tk.Label(window, text='Epochs: ')
-    epochs_label.pack()
+    container = Frame(frame)
+    container.pack()
 
-    epochs_var = tk.IntVar()
+    epochs_label = Label(container, text='Epochs: ')
+    epochs_label.pack(side=tk.LEFT)
+
+    epochs_var = IntVar()
     epochs_var.set(200)
-    epochs_entry = tk.Entry(window, textvariable=epochs_var)
-    epochs_entry.pack()
+    epochs_entry = Entry(container, textvariable=epochs_var, width=4)
+    epochs_entry.pack(side=tk.LEFT)
 
-    data_prep_btn = tk.Button(window, text='Preprocess Data', width=25, command=data_preprocessing)
-    data_prep_btn.pack()
+    train_btn = Button(container, text='Train SAE', width=15, command=lambda: train(epochs_var.get()))
+    test_btn = Button(container, text='Test SAE', width=15, command=test)
 
-    train_btn = tk.Button(window, text='Train SAE', width=25, command=lambda: train(epochs_var.get()))
-    train_btn.pack()
+    train_btn.pack(side=tk.LEFT)
+    test_btn.pack(side=tk.LEFT)
 
-    test_btn = tk.Button(window, text='Test SAE', width=25, command=test)
-    test_btn.pack()
+    canvas = Canvas(frame, bg='#FFFFFF')
+    canvas.pack(fill=tk.BOTH, expand=True)
+
+    selected_container = Frame(canvas)
+    selected_container.pack(side=tk.TOP, pady=5)
+
+    selected_lbl = Label(selected_container, text='Selected movie: ', height=1)
+    selected_lbl.pack(side=tk.LEFT, fill=tk.X)
+
+    selected_text = tk.Text(selected_container, height=1, width=25)
+    # selected_text.config(state=tk.DISABLED)
+    selected_text.pack(side=tk.LEFT, fill=tk.X)
+
+    rating_lbl = Label(selected_container, text='Rating (1 - 5): ', height=1)
+    rating_lbl.pack(side=tk.LEFT, fill=tk.X)
+
+    rating_var = IntVar()
+    rating_var.set(0)
+    epochs_entry = Entry(selected_container, textvariable=rating_var, width=4)
+    epochs_entry.pack(side=tk.LEFT)
+
+    rating_btn = Button(selected_container, text='Rate', width=5, command=lambda: submit_rating(rating_var.get()))
+    rating_btn.pack()
+
+    pred_btn = Button(selected_container, text='Predict', width=5, command=lambda: predict())
+    pred_btn.pack()
+
+    movie_scroll = Scrollbar(canvas, orient=tk.VERTICAL)
+    movie_scroll.pack(side='right', fill='y')
+    movie_listbox = Listbox(canvas, yscrollcommand=movie_scroll.set)
+    movie_listbox.bind('<<ListboxSelect>>', cur_select)
+
+    for movie in movie_list:
+        movie_listbox.insert(tk.END, movie + '\n')
+
+    movie_listbox.pack(side='left', fill='both', expand=True)
+    movie_scroll.config(command=movie_listbox.yview)
 
     window.mainloop()
 
@@ -186,5 +260,51 @@ def test():
     print('Testing complete')
 
 
+def predict():
+    import pandas as pd
+
+    pred_dataset = zip(*user_ratings)
+    pred_movie_names, pred_ratings = list(pred_dataset)
+    pred_movie_names = list(pred_movie_names)
+    pred_ratings = list(pred_ratings)
+
+    pred_movie_id = []
+    for name in pred_movie_names:
+        pred_movie_id.append(int(movies[name == movies[1]].iloc[:, 0]))
+
+    pred_dict = {'user id': list(np.ones(len(pred_ratings))),
+                 'movie id': pred_movie_id,
+                 'rating': pred_ratings,
+                 'time': list(np.zeros(len(pred_ratings)))}
+
+    pred_df = pd.DataFrame(pred_dict, columns=['user id', 'movie id', 'rating', 'time'])
+
+    pred_np = np.array(pred_df, dtype='int')
+
+    global pred_matrix
+    pred_matrix = to_matrix(1, nb_movies, pred_np)
+
+    pred_tensor = torch.FloatTensor(pred_matrix)
+
+    x = Variable(pred_tensor).unsqueeze(0)
+    output = sae.forward(x)
+    output = output.squeeze().tolist()
+    print(type(output))
+    print(len(output))
+    print(output)
+    string = 'Truman Show, The (1998)'
+    suggestions = []
+    for i, pred in enumerate(output):
+        if pred > 4.:
+            try:
+                suggestions.append((movies[movies.iloc[:, 0] == i].iloc[0, 1], pred))
+            except:
+                pass
+    suggestions.sort(key=lambda tup: tup[1])
+    suggestions = suggestions[::-1]
+    print(len(suggestions), suggestions)
+
+
 if __name__ == '__main__':
+    data_preprocessing()
     create_gui()

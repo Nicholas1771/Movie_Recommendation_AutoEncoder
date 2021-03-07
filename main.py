@@ -7,7 +7,7 @@ import torch.optim as opt
 from torch.autograd import Variable
 from SAE import SAE
 import tkinter as tk
-from tkinter import Frame, Canvas, Scrollbar, Listbox, Tk, Button, Label, IntVar, Entry
+from tkinter import Frame, Canvas, Scrollbar, Listbox, Tk, Button, Label, IntVar, Entry, StringVar
 
 movies = None
 users = None
@@ -22,6 +22,10 @@ selected_text = None
 selected_movie_name = None
 pred_matrix = None
 movie_list = None
+search_list = None
+search_box = None
+predict_box = None
+pred_list = None
 
 
 # Define method to convert to matrix structure
@@ -72,7 +76,7 @@ def data_preprocessing():
     a tensor, among other things.
     :return:
     """
-    global nb_movies, nb_users, training_tensor, test_tensor, movies, users, ratings
+    global nb_movies, nb_users, training_tensor, test_tensor, movies, users, ratings, search_list
 
     print('Preprocessing the dataset')
 
@@ -86,6 +90,7 @@ def data_preprocessing():
     test_set = pd.read_csv('data/ml-100k/ml-100k/u1.test', delimiter='\t', header=None)
 
     get_movie_list(training_set)
+    search_list = movie_list
 
     # Convert training set and test set from dataframe to numpy arrays
     training_set = np.array(training_set, dtype='int')
@@ -98,6 +103,7 @@ def data_preprocessing():
     # Convert the training set and test set to matrix using the to_matrix method defined above
     training_matrix = to_matrix(nb_users, nb_movies, training_set)
     test_matrix = to_matrix(nb_users, nb_movies, test_set)
+    print(np.array(test_matrix))
 
     # Convert the data into torch tensors
     training_tensor = torch.FloatTensor(training_matrix)
@@ -118,12 +124,14 @@ def cur_select(event):
     selection = widget.curselection()
     picked = widget.get(selection[0])
     selected_movie_name = picked[0:-1]
+    selected_text.configure(state=tk.NORMAL)
     selected_text.delete(1.0, tk.END)
     selected_text.insert(1.0, selected_movie_name)
+    selected_text.configure(state=tk.DISABLED)
 
 
 def create_gui():
-    global selected_text
+    global selected_text, search_box
     window = Tk()
     frame = Frame(window, width=500, height=500)
     frame.pack(padx=10, pady=10)
@@ -142,20 +150,35 @@ def create_gui():
     train_btn = Button(container, text='Train SAE', width=15, command=lambda: train(epochs_var.get()))
     test_btn = Button(container, text='Test SAE', width=15, command=test)
 
+    file_name_var = StringVar()
+    file_name_entry = Entry(container, textvariable=file_name_var, width=10)
+    save_model_btn = Button(container, text='Save Model', width=15, command=lambda: save_model(file_name_var.get()))
+    load_name_btn = Button(container, text='Load Model', width=15, command=lambda: load_model(file_name_var.get()))
+
     train_btn.pack(side=tk.LEFT)
     test_btn.pack(side=tk.LEFT)
 
+    file_label = Label(container, text='File name: ')
+    file_label.pack(side=tk.LEFT)
+    file_name_entry.pack(side=tk.LEFT)
+    save_model_btn.pack(side=tk.LEFT)
+    load_name_btn.pack(side=tk.LEFT)
+
     canvas = Canvas(frame, bg='#FFFFFF')
-    canvas.pack(fill=tk.BOTH, expand=True)
+    canvas.pack(fill=tk.Y, side=tk.LEFT, expand=True)
 
     selected_container = Frame(canvas)
     selected_container.pack(side=tk.TOP, pady=5)
 
-    selected_lbl = Label(selected_container, text='Selected movie: ', height=1)
-    selected_lbl.pack(side=tk.LEFT, fill=tk.X)
+    search_lbl = Label(selected_container, text='Search: ')
+    search_lbl.pack(side=tk.LEFT)
+    search_var = StringVar()
+    search_entry = Entry(selected_container, textvariable=search_var, width=25)
+    search_entry.pack(side=tk.LEFT)
+    search_btn = Button(selected_container, text='Search', width=5, command=lambda: search(search_var.get()))
+    search_btn.pack(side=tk.LEFT)
 
-    selected_text = tk.Text(selected_container, height=1, width=25)
-    # selected_text.config(state=tk.DISABLED)
+    selected_text = tk.Text(selected_container, state=tk.DISABLED, height=1, width=25)
     selected_text.pack(side=tk.LEFT, fill=tk.X)
 
     rating_lbl = Label(selected_container, text='Rating (1 - 5): ', height=1)
@@ -174,16 +197,55 @@ def create_gui():
 
     movie_scroll = Scrollbar(canvas, orient=tk.VERTICAL)
     movie_scroll.pack(side='right', fill='y')
-    movie_listbox = Listbox(canvas, yscrollcommand=movie_scroll.set)
-    movie_listbox.bind('<<ListboxSelect>>', cur_select)
+    search_box = Listbox(canvas, yscrollcommand=movie_scroll.set)
+    search_box.bind('<<ListboxSelect>>', cur_select)
 
-    for movie in movie_list:
-        movie_listbox.insert(tk.END, movie + '\n')
+    for movie in search_list:
+        search_box.insert(tk.END, movie + '\n')
 
-    movie_listbox.pack(side='left', fill='both', expand=True)
-    movie_scroll.config(command=movie_listbox.yview)
+    search_box.pack(side='left', fill='both', expand=True)
+    movie_scroll.config(command=search_box.yview)
+
+    global predict_box
+
+    pred_canvas = Canvas(frame)
+
+    pred_scroll = Scrollbar(pred_canvas, orient=tk.VERTICAL)
+    pred_scroll.pack(side='right', fill='y')
+    predict_box = Listbox(pred_canvas, yscrollcommand=pred_scroll.set)
+
+    predict_box.pack(side='left', fill='both', expand=True)
+    pred_scroll.config(command=predict_box.yview)
+    pred_canvas.pack(fill=tk.Y, side=tk.LEFT, expand=True)
 
     window.mainloop()
+
+
+def search(string):
+    search_box.delete(0, tk.END)
+    if string == '':
+        for movie in movie_list:
+            search_box.insert(tk.END, movie + '\n')
+    else:
+        matching = []
+        for movie in movie_list:
+            movie_lower = movie.lower()
+            string_lower = string.lower()
+            if string_lower in movie_lower:
+                matching.append(movie)
+        for movie in matching:
+            search_box.insert(tk.END, movie + '\n')
+
+
+def save_model(string):
+    torch.save(sae, 'models/' + string + '.pt')
+    print(f'Model: {string} has been saved')
+
+
+def load_model(string):
+    global sae
+    sae = torch.load('models/' + string + '.pt')
+    print(f'Model: {string} has been loaded')
 
 
 def train(nb_epochs=10):
@@ -278,21 +340,18 @@ def predict():
                  'time': list(np.zeros(len(pred_ratings)))}
 
     pred_df = pd.DataFrame(pred_dict, columns=['user id', 'movie id', 'rating', 'time'])
-
     pred_np = np.array(pred_df, dtype='int')
-
     global pred_matrix
-    pred_matrix = to_matrix(1, nb_movies, pred_np)
+    pred_matrix = to_matrix(nb_users, nb_movies, pred_np)
 
     pred_tensor = torch.FloatTensor(pred_matrix)
 
-    x = Variable(pred_tensor).unsqueeze(0)
+    x = Variable(pred_tensor[0]).unsqueeze(0)
+    print(x)
     output = sae.forward(x)
     output = output.squeeze().tolist()
-    print(type(output))
-    print(len(output))
     print(output)
-    string = 'Truman Show, The (1998)'
+
     suggestions = []
     for i, pred in enumerate(output):
         if pred > 4.:
@@ -302,7 +361,10 @@ def predict():
                 pass
     suggestions.sort(key=lambda tup: tup[1])
     suggestions = suggestions[::-1]
-    print(len(suggestions), suggestions)
+    global predict_box
+    predict_box.delete(0, tk.END)
+    for movie, rating in suggestions:
+        predict_box.insert(tk.END, str(rating)[:3] + ' : ' + movie + '\n')
 
 
 if __name__ == '__main__':

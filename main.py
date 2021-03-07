@@ -8,6 +8,7 @@ from torch.autograd import Variable
 from SAE import SAE
 import tkinter as tk
 from tkinter import Frame, Canvas, Scrollbar, Listbox, Tk, Button, Label, IntVar, Entry, StringVar
+import json
 
 movies = None
 users = None
@@ -208,7 +209,9 @@ def create_gui():
 
     global predict_box
 
-    pred_canvas = Canvas(frame)
+    right_canvas = Canvas(frame)
+
+    pred_canvas = Canvas(right_canvas)
 
     pred_scroll = Scrollbar(pred_canvas, orient=tk.VERTICAL)
     pred_scroll.pack(side='right', fill='y')
@@ -216,7 +219,24 @@ def create_gui():
 
     predict_box.pack(side='left', fill='both', expand=True)
     pred_scroll.config(command=predict_box.yview)
-    pred_canvas.pack(fill=tk.Y, side=tk.LEFT, expand=True)
+    pred_canvas.pack(fill=tk.BOTH, side=tk.BOTTOM, expand=True)
+
+    user_canvas = Canvas(right_canvas)
+
+    user_name_var = StringVar()
+    user_file_entry = Entry(user_canvas, textvariable=user_name_var, width=10)
+    save_user_btn = Button(user_canvas, text='Save User', width=15, command=lambda: save_user(user_name_var.get()))
+    load_user_btn = Button(user_canvas, text='Load User', width=15, command=lambda: load_user(user_name_var.get()))
+
+    user_file_label = Label(user_canvas, text='User name: ')
+    user_file_label.pack(side=tk.LEFT)
+    user_file_entry.pack(side=tk.LEFT)
+    save_user_btn.pack(side=tk.LEFT)
+    load_user_btn.pack(side=tk.LEFT)
+
+    user_canvas.pack(side=tk.TOP)
+
+    right_canvas.pack()
 
     window.mainloop()
 
@@ -246,6 +266,23 @@ def load_model(string):
     global sae
     sae = torch.load('models/' + string + '.pt')
     print(f'Model: {string} has been loaded')
+
+
+def save_user(string):
+
+    with open(f'user_data/{string}.json', 'w') as f:
+        json.dump(user_ratings, f)
+
+    print(f'User: {string} has been saved')
+
+
+def load_user(string):
+    global user_ratings
+
+    with open(f'user_data/{string}.json', 'r') as f:
+        user_ratings = [tuple(x) for x in json.load(f)]
+
+    print(f'User: {string} has been loaded')
 
 
 def train(nb_epochs=10):

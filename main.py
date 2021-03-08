@@ -104,7 +104,6 @@ def data_preprocessing():
     # Convert the training set and test set to matrix using the to_matrix method defined above
     training_matrix = to_matrix(nb_users, nb_movies, training_set)
     test_matrix = to_matrix(nb_users, nb_movies, test_set)
-    print(np.array(test_matrix))
 
     # Convert the data into torch tensors
     training_tensor = torch.FloatTensor(training_matrix)
@@ -384,16 +383,19 @@ def predict():
     pred_tensor = torch.FloatTensor(pred_matrix)
 
     x = Variable(pred_tensor[0]).unsqueeze(0)
-    print(x)
     output = sae.forward(x)
     output = output.squeeze().tolist()
+    print(len(x.squeeze().tolist()))
+    print(x.squeeze().tolist())
+    print(len(output))
     print(output)
 
     suggestions = []
     for i, pred in enumerate(output):
-        if pred > 4.:
+        if pred > 4:
             try:
-                suggestions.append((movies[movies.iloc[:, 0] == i].iloc[0, 1], pred))
+                movie_name = movies[movies.iloc[:, 0] == i+1].iloc[0, 1]
+                suggestions.append((movies[movies.iloc[:, 0] == i+1].iloc[0, 1], pred))
             except:
                 pass
     suggestions.sort(key=lambda tup: tup[1])
